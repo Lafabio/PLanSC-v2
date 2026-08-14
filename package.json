@@ -1,0 +1,51 @@
+{
+  "name": "plansc-v2",
+  "version": "1.0.0",
+  "description": "PLanSC — Sistema de Planejamento BNCC/SC (software desktop instalável)",
+  "main": "main.js",
+  "author": "Prof. Lafaiete Erkmann",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "br.com.lafabio.plansc",
+    "productName": "PLanSC",
+    "files": [
+      "index.html",
+      "main.js",
+      "preload.js",
+      "icon.ico"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PLanSC",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "license": null
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "png-to-ico": "^3.0.2"
+  }
+}
