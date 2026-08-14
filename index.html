@@ -2695,6 +2695,47 @@ async function exportDocx(){
 
 // ===== SISTEMA DE TOKENS / CONTROLE DE USO =====
 var LIMITE_GRATUITO = 5;
+// Cache do estado de uso vindo do Firestore (autoridade). null = ainda não carregado.
+var USO_CACHE = null;
+
+function usoDocRef(){
+  if(!firestoreOk()) return null;
+  try{ return FIRESTORE_DB.collection('uso_planos').doc(FIREBASE_AUTH.currentUser.uid); }
+  catch(e){ return null; }
+}
+function usoFvIncrement(n){
+  try{ return firebase.firestore.FieldValue.increment(n); }catch(e){ return null; }
+}
+// Lê (ou cria) o documento de uso do professor no Firestore e preenche USO_CACHE.
+async function carregarUsoFirestore(){
+  USO_CACHE=null;
+  var ref=usoDocRef();
+  if(!ref) return false;
+  try{
+    var snap=await ref.get();
+    if(snap.exists){
+      USO_CACHE=snap.data()||{};
+      return true;
+    }
+    // Cria o estado inicial (regra do Firestore exige o formato padrão)
+    await ref.set({
+      uid:FIREBASE_AUTH.currentUser.uid,
+      gratuitos:LIMITE_GRATUITO,
+      planosGerados:0,
+      tokens:0
+    });
+    USO_CACHE={uid:FIREBASE_AUTH.currentUser.uid,gratuitos:LIMITE_GRATUITO,planosGerados:0,tokens:0};
+    return true;
+  }catch(e){
+    console.warn('Firestore de uso indisponível (regras não aplicadas?):',e);
+    return false;
+  }
+}
+function usarCacheOuLocal(){
+  if(USO_CACHE) return USO_CACHE;
+  var d=getTokenData(PROFESSOR_ATUAL?PROFESSOR_ATUAL.id:'');
+  return {gratuitos:d.gratuitos||LIMITE_GRATUITO,planosGerados:d.planosGerados||0,tokens:d.tokens||0};
+}
 
 function getTokenData(professorId){
   try{
@@ -2712,22 +2753,63 @@ function setTokenData(professorId,data){
 function getPlanosRestantes(){
   if(!PROFESSOR_ATUAL) return 0;
   if(IS_ADMIN) return 9999;
-  var d=getTokenData(PROFESSOR_ATUAL.id);
-  return Math.max(0,(d.gratuitos - d.planosGerados) + (d.tokens||0) + (KIWIFY_SALDO_BACKEND||0));
+  var u=usarCacheOuLocal();
+  return Math.max(0,(u.gratuitos - u.planosGerados) + (u.tokens||0) + (KIWIFY_SALDO_BACKEND||0));
 }
 
 function getPlanosGerados(){
   if(!PROFESSOR_ATUAL) return 0;
-  var d=getTokenData(PROFESSOR_ATUAL.id);
-  return d.planosGerados||0;
+  var u=usarCacheOuLocal();
+  return u.planosGerados||0;
 }
 
-// Consome 1 plano ao gerar: primeiro os gratuitos locais, depois os créditos
-// comprados no Kiwify (saldo autoritativo no backend). Retorna false se não
-// houver plano disponível (abre o modal de compra).
+// Consome 1 plano ao gerar. Se o Firestore estiver ativo, ele é a autoridade
+// (regras impedem o professor de se autogratificar). Senão, usa o controle
+// local legado (inseguro — depende do Firestore estar ativado para valer).
 async function consumirToken(){
   if(!PROFESSOR_ATUAL) return false;
   if(IS_ADMIN) return true;
+  var ref=usoDocRef();
+  if(ref){
+    await carregarUsoFirestore();
+    var u=USO_CACHE;
+    if(u){
+      // 1) Plano gratuito disponível → incrementa planosGerados no Firestore
+      var gratisRestantes=Math.max(0,(u.gratuitos||0)-(u.planosGerados||0));
+      if(gratisRestantes>0){
+        try{
+          await ref.update({planosGerados:usoFvIncrement(1)});
+          USO_CACHE=null;
+          atualizarUsoBadge();
+          return true;
+        }catch(e){
+          console.warn('Falha ao consumir gratuito no Firestore:',e);
+        }
+      }
+      // 2) Créditos comprados no Kiwify (backend autoritativo)
+      if(KIWIFY_SALDO_BACKEND===null){
+        try{ await sincronizarCreditosKiwify(); }catch(e){}
+      }
+      if((KIWIFY_SALDO_BACKEND||0)>0){
+        var ok=await consumirCreditoBackend();
+        if(ok){ atualizarUsoBadge(); return true; }
+      }
+      // 3) Tokens concedidos pelo admin (decremento no Firestore)
+      if((u.tokens||0)>0){
+        try{
+          await ref.update({tokens:usoFvIncrement(-1)});
+          USO_CACHE=null;
+          atualizarUsoBadge();
+          return true;
+        }catch(e){
+          console.warn('Falha ao consumir token no Firestore:',e);
+        }
+      }
+      abrirTokenModal(true);
+      return false;
+    }
+  }
+  // ── Fallback legado (Firestore indisponível) ──
   var d=getTokenData(PROFESSOR_ATUAL.id);
   var gratisRestantes=Math.max(0,(d.gratuitos||0)-(d.planosGerados||0));
   if(gratisRestantes>0){
@@ -2736,18 +2818,13 @@ async function consumirToken(){
     atualizarUsoBadge();
     return true;
   }
-  // Acabou o gratuito: usa créditos comprados (backend) primeiro
   if(KIWIFY_SALDO_BACKEND===null){
     try{ await sincronizarCreditosKiwify(); }catch(e){}
   }
   if((KIWIFY_SALDO_BACKEND||0)>0){
     var ok=await consumirCreditoBackend();
-    if(ok){
-      atualizarUsoBadge();
-      return true;
-    }
+    if(ok){ atualizarUsoBadge(); return true; }
   }
-  // Sem créditos no backend: tenta os tokens locais concedidos pelo admin
   if((d.tokens||0)>0){
     d.tokens=Math.max(0,(d.tokens||0)-1);
     setTokenData(PROFESSOR_ATUAL.id,d);
@@ -2996,11 +3073,38 @@ function adminCarregarConfigKiwify(){
   if(el) el.value=getKiwifyBackendUrl();
 }
 
+// Referência do doc de uso de um professor pelo uid
+function usoDocRefById(uid){
+  if(!firestoreOk()||!uid) return null;
+  try{ return FIRESTORE_DB.collection('uso_planos').doc(uid); }
+  catch(e){ return null; }
+}
+
 // Admin: conceder tokens a um professor
 function adminConcederTokens(emailProf, qtd){
   var professores=getProfessores();
   var prof=professores.find(function(p){return p.email===emailProf||p.nome===emailProf;});
   if(!prof){alert('Professor não encontrado: '+emailProf);return;}
+  var ref=usoDocRefById(prof.id);
+  if(ref){
+    // Garante que o doc existe (estado inicial) e incrementa os tokens
+    ref.get().then(function(snap){
+      if(snap.exists){
+        return ref.update({tokens:usoFvIncrement(qtd)});
+      }
+      return ref.set({
+        uid:prof.id,
+        gratuitos:LIMITE_GRATUITO,
+        planosGerados:0,
+        tokens:qtd
+      });
+    }).then(function(){
+      alert('✅ '+qtd+' tokens concedidos para '+prof.nome+'.');
+    }).catch(function(e){
+      alert('⚠️ Falha ao conceder tokens no Firestore: '+e.message);
+    });
+    return;
+  }
   var d=getTokenData(prof.id);
   d.tokens=(d.tokens||0)+qtd;
   setTokenData(prof.id,d);
@@ -3012,6 +3116,25 @@ function adminResetarUso(emailProf){
   var professores=getProfessores();
   var prof=professores.find(function(p){return p.email===emailProf||p.nome===emailProf;});
   if(!prof){alert('Professor não encontrado.');return;}
+  var ref=usoDocRefById(prof.id);
+  if(ref){
+    ref.get().then(function(snap){
+      if(snap.exists){
+        return ref.update({planosGerados:0,gratuitos:LIMITE_GRATUITO});
+      }
+      return ref.set({
+        uid:prof.id,
+        gratuitos:LIMITE_GRATUITO,
+        planosGerados:0,
+        tokens:0
+      });
+    }).then(function(){
+      alert('✅ Uso gratuito resetado para '+prof.nome+'.');
+    }).catch(function(e){
+      alert('⚠️ Falha ao resetar uso no Firestore: '+e.message);
+    });
+    return;
+  }
   var d=getTokenData(prof.id);
   d.planosGerados=0;
   d.gratuitos=LIMITE_GRATUITO;
@@ -3604,6 +3727,13 @@ function loginProfessor(professor){
   // Sincroniza os créditos comprados no Kiwify (saldo autoritativo no backend)
   if(!IS_ADMIN) sincronizarCreditosKiwify();
 
+  // Carrega o controle de uso (planos gratuitos + tokens) do Firestore — autoridade
+  if(!IS_ADMIN){
+    carregarUsoFirestore().then(function(){
+      atualizarUsoBadge();
+    });
+  }
+
   // Avisar se restam poucos planos
   if(!IS_ADMIN){
     var restantes=getPlanosRestantes();
@@ -3820,18 +3950,44 @@ function adminVerUsoProfessor(){
   var professores=getProfessores();
   var lista=document.getElementById('adminTokenLista');
   if(!professores.length){lista.innerHTML='<em>Nenhum professor cadastrado.</em>';return;}
-  lista.innerHTML=professores.map(function(p){
+
+  var montar=function(dados){
+    lista.innerHTML=professores.map(function(p){
+      var d=dados[p.id]||{};
+      var restGrat=Math.max(0,(d.gratuitos||LIMITE_GRATUITO)-(d.planosGerados||0));
+      var tokens=d.tokens||0;
+      return '<div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-bottom:1px solid #1a2535;flex-wrap:wrap;">'+
+        '<span style="flex:1;color:#fff;min-width:140px;">'+esc(p.nome)+'</span>'+
+        (p.email?'<span style="color:#888;font-size:.7rem;flex:1;">'+esc(p.email)+'</span>':'')+
+        '<span style="color:#f9c74f;white-space:nowrap;">📝 '+( d.planosGerados||0)+' gerados</span>'+
+        '<span style="color:#90caf9;white-space:nowrap;">🆓 '+restGrat+' grát.</span>'+
+        '<span style="color:#4caf50;white-space:nowrap;">🎟️ '+tokens+' tokens</span>'+
+      '</div>';
+    }).join('');
+  };
+
+  // Autoridade: Firestore (coleção uso_planos). Se indisponível, usa o local.
+  if(firestoreOk()&&FIRESTORE_DB){
+    FIRESTORE_DB.collection('uso_planos').get().then(function(snap){
+      var dados={};
+      snap.forEach(function(doc){ dados[doc.id]=doc.data()||{}; });
+      montar(dados);
+    }).catch(function(){
+      var dados={};
+      professores.forEach(function(p){
+        var d=getTokenData(p.id);
+        dados[p.id]={gratuitos:d.gratuitos||LIMITE_GRATUITO,planosGerados:d.planosGerados||0,tokens:d.tokens||0};
+      });
+      montar(dados);
+    });
+    return;
+  }
+  var dados={};
+  professores.forEach(function(p){
     var d=getTokenData(p.id);
-    var restGrat=Math.max(0,(d.gratuitos||LIMITE_GRATUITO)-(d.planosGerados||0));
-    var tokens=d.tokens||0;
-    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-bottom:1px solid #1a2535;flex-wrap:wrap;">'+
-      '<span style="flex:1;color:#fff;min-width:140px;">'+esc(p.nome)+'</span>'+
-      (p.email?'<span style="color:#888;font-size:.7rem;flex:1;">'+esc(p.email)+'</span>':'')+
-      '<span style="color:#f9c74f;white-space:nowrap;">📝 '+( d.planosGerados||0)+' gerados</span>'+
-      '<span style="color:#90caf9;white-space:nowrap;">🆓 '+restGrat+' grát.</span>'+
-      '<span style="color:#4caf50;white-space:nowrap;">🎟️ '+tokens+' tokens</span>'+
-    '</div>';
-  }).join('');
+    dados[p.id]={gratuitos:d.gratuitos||LIMITE_GRATUITO,planosGerados:d.planosGerados||0,tokens:d.tokens||0};
+  });
+  montar(dados);
 }
 
 function adminTrocarSenha(){

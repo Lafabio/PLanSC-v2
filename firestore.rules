@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Só o admin pode tudo nesta coleção.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'lafaietep@gmail.com';
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // uso_planos/<uid> — controle de uso do professor (autoridade anti-fraude).
+    //
+    // O professor NUNCA pode:
+    //   • zerar "planosGerados" (não pode voltar a ter os 5 gratuitos);
+    //   • aumentar "tokens" (só o admin concede);
+    //   • alterar "gratuitos";
+    //   • apagar o próprio documento.
+    //
+    // Só é permitido consumir:
+    //   • 1 plano gratuito (planosGerados +1, apenas se ainda há grátis); ou
+    //   • 1 token concedido pelo admin (tokens -1, apenas se há tokens).
+    // ─────────────────────────────────────────────────────────────────────
+    match /uso_planos/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+
+      // Criação: só o estado inicial padrão, pelo próprio dono (ou admin).
+      allow create: if isAdmin() || (
+        request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.gratuitos == 5
+        && request.resource.data.planosGerados == 0
+        && request.resource.data.tokens == 0
+      );
+
+      allow update: if isAdmin() || (
+        request.auth != null && request.auth.uid == uid && (
+          // consome 1 plano gratuito (planosGerados +1, ainda há grátis)
+          (request.resource.data.planosGerados == resource.data.planosGerados + 1
+           && resource.data.planosGerados < resource.data.gratuitos
+           && request.resource.data.tokens == resource.data.tokens
+           && request.resource.data.gratuitos == resource.data.gratuitos)
+          ||
+          // consome 1 token (tokens -1, ainda há tokens)
+          (request.resource.data.tokens == resource.data.tokens - 1
+           && resource.data.tokens > 0
+           && request.resource.data.planosGerados == resource.data.planosGerados
+           && request.resource.data.gratuitos == resource.data.gratuitos)
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+  }
+}
