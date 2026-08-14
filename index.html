@@ -2717,14 +2717,19 @@ async function carregarUsoFirestore(){
       USO_CACHE=snap.data()||{};
       return true;
     }
-    // Cria o estado inicial (regra do Firestore exige o formato padrão)
+    // Cria o estado inicial (regra do Firestore exige o formato padrão).
+    // Migração: usa o planosGerados do controle local legado, para quem já
+    // consumiu seus 5 gratuitos não ganhar uma "segunda leva" de 5 grátis.
+    var mig=getTokenData(FIREBASE_AUTH.currentUser.uid);
+    var migG=mig.planosGerados||0;
+    if(migG>LIMITE_GRATUITO) migG=LIMITE_GRATUITO;
     await ref.set({
       uid:FIREBASE_AUTH.currentUser.uid,
       gratuitos:LIMITE_GRATUITO,
-      planosGerados:0,
+      planosGerados:migG,
       tokens:0
     });
-    USO_CACHE={uid:FIREBASE_AUTH.currentUser.uid,gratuitos:LIMITE_GRATUITO,planosGerados:0,tokens:0};
+    USO_CACHE={uid:FIREBASE_AUTH.currentUser.uid,gratuitos:LIMITE_GRATUITO,planosGerados:migG,tokens:0};
     return true;
   }catch(e){
     console.warn('Firestore de uso indisponível (regras não aplicadas?):',e);

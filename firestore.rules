@@ -23,13 +23,16 @@ service cloud.firestore {
     match /uso_planos/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
 
-      // Criação: só o estado inicial padrão, pelo próprio dono (ou admin).
+      // Criação: estado inicial padrão (5 gratuitos, sem tokens), pelo próprio
+      // dono (ou admin). "planosGerados" pode vir de 0 até gratuitos (não pode
+      // ser negativo e o professor nunca pode criar com tokens > 0).
       allow create: if isAdmin() || (
         request.auth != null
         && request.auth.uid == uid
         && request.resource.data.uid == uid
         && request.resource.data.gratuitos == 5
-        && request.resource.data.planosGerados == 0
+        && request.resource.data.planosGerados >= 0
+        && request.resource.data.planosGerados <= 5
         && request.resource.data.tokens == 0
       );
 
