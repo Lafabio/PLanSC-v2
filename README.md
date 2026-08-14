@@ -37,5 +37,11 @@ Estrutura:
 - `preload.js` — ponte mínima entre o app web e o Electron.
 - `index.html` — aplicação completa (mesma do site, com ajuste na URL de verificação de e-mail).
 - `icon.ico` — ícone do instalador e do aplicativo.
+- `firestore.rules` — regras de segurança do Firestore (anti-fraude de tokens/planos gratuitos).
+
+> ⚠️ **Importante (anti-fraude):** o controle de planos gratuitos e tokens agora é validado no
+> Firestore (coleção `uso_planos`). As regras em `firestore.rules` precisam estar aplicadas no
+> console do Firebase (Firestore Database → Regras), senão o app cai no controle local
+> (inseguro). Sem as regras aplicadas, o professor consegue burlar os 5 planos gratuitos.
 
 Gerar o instalador exige apenas `npm run dist` (sem assinatura de código; o Windows pode avisar "Editor desconhecido" ao instalar).
