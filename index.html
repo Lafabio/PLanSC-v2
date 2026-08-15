@@ -1265,7 +1265,7 @@ function renderHabPanels(){
       +'<input type="text" class="skill-search" id="skillSearch_'+i+'" '
       +'placeholder="Código, verbo ou tema... (ex: EM13CNT101, analisar)" '
       +'value="'+(h.currentHab?esc(h.currentHab.cod+' — '+h.currentHab.verbo):'')+ '" '
-      +'oninput="filterSkillsHab('+i+')" onfocus="openDropdownHab('+i+')" autocomplete="off">'
+      +'oninput="filterSkillsHab('+i+')" onfocus="focusSkillSearch('+i+')" autocomplete="off">'
       +'<div class="skill-dropdown" id="skillDropdown_'+i+'"></div>'
       +'</div></div>';
 
@@ -1350,15 +1350,8 @@ function renderHabPanels(){
       });
     }
   });
-  // Re-attach outside click
-  document.querySelectorAll('.skill-selector-wrap').forEach(function(wrap, i){
-    document.addEventListener('click', function(e){
-      if(!wrap.contains(e.target)){
-        var dd = wrap.querySelector('.skill-dropdown');
-        if(dd) dd.classList.remove('open');
-      }
-    });
-  });
+  // Fechar dropdowns ao clicar fora (listener único delegado, sem acumular por render)
+  // ver attachSkillOutsideClick() abaixo
 }
 
 // ── Switch tab ──
@@ -1629,6 +1622,27 @@ function openDropdownHab(habIdx){
   }
 }
 function openDropdown(){ openDropdownHab(HAB_ACTIVE); }
+
+// Ao focar a busca: seleciona todo o texto (digitar substitui o valor pré-preenchido)
+function focusSkillSearch(habIdx){
+  var el = document.getElementById('skillSearch_'+habIdx);
+  if(el){ try{ el.focus(); el.select(); }catch(e){} }
+  openDropdownHab(habIdx);
+}
+
+// Listener ÚNICO e delegado: fecha qualquer dropdown aberto quando o clique é fora do seu wrap
+var _skillOutsideClickAttached = false;
+function attachSkillOutsideClick(){
+  if(_skillOutsideClickAttached) return;
+  _skillOutsideClickAttached = true;
+  document.addEventListener('click', function(e){
+    var wrap = e.target && e.target.closest ? e.target.closest('.skill-selector-wrap') : null;
+    document.querySelectorAll('.skill-dropdown.open').forEach(function(dd){
+      if(!wrap || !wrap.contains(dd)) dd.classList.remove('open');
+    });
+  });
+}
+attachSkillOutsideClick();
 
 function renderDropdownHab(habIdx, skills){
   var dd = document.getElementById('skillDropdown_'+habIdx);
