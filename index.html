@@ -173,6 +173,7 @@ body{background:#e8e5db;background-image:repeating-linear-gradient(0deg,transpar
 .ai-box h4{color:#3949ab;font-size:.85rem;font-weight:700;margin-bottom:6px;}
 .ai-result{font-size:.85rem;color:#333;line-height:1.7;margin-top:9px;white-space:pre-wrap;word-break:break-word;overflow:visible;max-height:none;}
 .ai-result.loading{color:#888;font-style:italic;}
+mark.hl{background:#fff3a6;color:#4d3d00;font-weight:700;border-radius:3px;padding:0 3px;box-shadow:0 0 0 1px rgba(180,150,0,.25);}
 .spinner{display:inline-block;width:13px;height:13px;border:2px solid #c5cae9;border-top-color:#3949ab;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;}
 @keyframes spin{to{transform:rotate(360deg);}}
 
@@ -979,6 +980,14 @@ body{background:#e8e5db;background-image:repeating-linear-gradient(0deg,transpar
     <div class="tab-panel" id="tabChk">
       <div class="checklist" id="checklistSED"></div>
     </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="badge">♿</span> Pontos Fundamentais — Apoio ao Professor Auxiliar (PEI)</div>
+    <div class="alert-info">💡 A IA analisa o <strong>plano completo</strong> e <strong>destaca os pontos mais fundamentais</strong> (objetivo essencial, conteúdo-chave, metodologia indispensável e avaliação essencial), para orientar o professor auxiliar a planejar a adaptação para o aluno com <strong>necessidades especiais segundo o PEI</strong>.</div>
+    <div class="btn-row" style="margin-top:8px;justify-content:flex-start;">
+      <button class="btn btn-pri" onclick="destacarPontosPEI()" id="btnPEI">🤖 Destacar pontos fundamentais (PEI)</button>
+    </div>
+    <div class="ai-result" id="iaPEI"></div>
   </div>
   <div class="btn-row">
     <button class="btn btn-sec" onclick="goTo(4)">← Voltar</button>
@@ -4034,6 +4043,81 @@ function adminStatus(id,tipo,msg){
 }
 
 function salvarChaveGemini(){adminSalvarChave();}
+
+// ===== PONTOS FUNDAMENTAIS — PROFESSOR AUXILIAR (PEI) =====
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function renderAIHtml(t){
+  t=escHtml(t);
+  t=t.replace(/\*\*(.+?)\*\*/g,'<mark class="hl">$1</mark>');
+  t=t.replace(/```/g,'');
+  return t.replace(/\n/g,'<br>');
+}
+async function destacarPontosPEI(){
+  ensureHabs();
+  ST.habilidades.forEach(function(h,i){
+    if(document.getElementById('cont_'+i)) syncContFields(i);
+    if(document.getElementById('met_'+i)) syncMetFields(i);
+    if(document.getElementById('criteriaList_'+i)) syncCritFields(i);
+  });
+  var hab=getHabText();
+  if(!hab){alert('Preencha o plano (selecione pelo menos uma habilidade) antes de destacar os pontos fundamentais.');return;}
+  var b=document.getElementById('btnPEI');
+  var r=document.getElementById('iaPEI');
+  b.disabled=true;
+  r.className='ai-result loading';
+  r.innerHTML='<span class="spinner"></span>Analisando o plano e destacando os pontos fundamentais...';
+  try{
+    var area=ST.areas.join(', ');
+    var comp=document.getElementById('componente').value.trim();
+    var tema=document.getElementById('temaGerador').value.trim();
+    var turma=document.getElementById('turma').value.trim();
+    var ctx=document.getElementById('contexto').value.trim();
+    var cont=ST.habilidades.map(function(h,i){
+      var c=h.conteudo||'';
+      return c ? 'Habilidade '+(i+1)+':\n'+c : '';
+    }).filter(Boolean).join('\n\n');
+    var met=ST.habilidades.map(function(h,i){
+      var m=h.metodologia||'';
+      return m ? 'Habilidade '+(i+1)+':\n'+m : '';
+    }).filter(Boolean).join('\n\n');
+    var crit=[];
+    ST.habilidades.forEach(function(h,i){
+      (h.criterios||[]).forEach(function(c,j){crit.push('Hab.'+(i+1)+'.'+(j+1)+': '+c);});
+    });
+    var instr=getInstrs();
+    var p='Você é um especialista em educação inclusiva e PEI (Plano de Ensino Individualizado).'
+      +'\nAnalise o PLANO DE AULA completo abaixo e DESTAQUE os pontos mais fundamentais do plano — aqueles que o professor auxiliar PRECISA conhecer para planejar a adaptação para o aluno com necessidades especiais segundo o PEI.'
+      +'\n\nPLANO DE AULA:'
+      +'\nÁrea/Componente: '+(area||comp||'—')
+      +'\nTema Gerador: '+(tema||'—')
+      +'\nTurma/Etapa: '+(turma||'—')
+      +'\nContexto da turma: '+(ctx||'—')
+      +'\n\nHABILIDADES:\n'+(hab||'—')
+      +'\n\nOBJETO DE CONHECIMENTO / CONTEÚDO:\n'+(cont||'—')
+      +'\n\nCAMINHO METODOLÓGICO:\n'+(met||'—')
+      +'\n\nCRITÉRIOS DE AVALIAÇÃO:\n'+(crit.join('\n')||'—')
+      +'\n\nINSTRUMENTOS DE AVALIAÇÃO:\n'+(instr||'—')
+      +'\n\n---'
+      +'\nTAREFA: identifique e apresente, por seção, os pontos FUNDAMENTAIS do plano:'
+      +'\n1) OBJETIVO ESSENCIAL — o que o aluno precisa aprender (essência da habilidade, sem trocar o verbo).'
+      +'\n2) CONTEÚDO-CHAVE — o objeto de conhecimento indispensável.'
+      +'\n3) METODOLOGIA INDISPENSÁVEL — os momentos/atividades que não podem faltar para desenvolver a habilidade.'
+      +'\n4) AVALIAÇÃO ESSENCIAL — os critérios e instrumentos que verificam a aprendizagem.'
+      +'\n5) PONTOS DE ATENÇÃO NA ADAPTAÇÃO (PEI) — o que merece cuidado especial ao adaptar para o aluno com necessidades especiais.'
+      +'\n\nREGRAS:'
+      +'\n- Destaque com **asteriscos duplos** as palavras ou trechos mais importantes de cada ponto fundamental.'
+      +'\n- Mantenha o verbo e a estrutura da habilidade. Seja direto, prático e objetivo.'
+      +'\n- Use cabeçalhos curtos (ex: "1) OBJETIVO ESSENCIAL:") e frases curtas.'
+      +'\n- Responda em português do Brasil, sem markdown extra.';
+    var t=await callGemini(p);
+    r.className='ai-result';
+    r.innerHTML=renderAIHtml(t);
+  }catch(e){
+    r.className='ai-result loading';
+    r.innerHTML='⚠️ '+escHtml(e.message);
+  }
+  b.disabled=false;
+}
 
 function mostrarSemAuth(){
   document.getElementById('authOverlay').classList.add('open');
