@@ -2250,7 +2250,7 @@ async function sugerirCrit(){
     var formato = '';
     ST.habilidades.forEach(function(h,i){
       formato += '\nHAB '+(i+1)+':';
-      for(var k=1;k<=4;k++) formato += '\nCRIT: [critério '+k+' da habilidade '+(i+1)+']';
+      for(var k=1;k<=4;k++) formato += '\nCRIT: [descrição completa e detalhada do critério '+k+' da habilidade '+(i+1)+']';
     });
     formato += '\n\nINSTR: [instrumento] — [como avalia estes critérios]';
     formato += '\nINSTR: [instrumento] — [justificativa]';
@@ -2265,8 +2265,10 @@ async function sugerirCrit(){
       +'\n- Observáveis e mensuráveis, na 3ª pessoa do singular'
       +'\n- Alinhados ao nível de Bloom identificado naquela habilidade'
       +'\n- Relacionados ao conteúdo E ao que o aluno faz na metodologia descrita'
+      +'\n- CADA critério deve ser descrito COMPLETAMENTE, em um parágrafo único e denso, com esta estrutura: (1) a AÇÃO observável que o aluno realiza, derivada do verbo da habilidade; (2) COM QUÊ ele realiza — conteúdo, material, produto ou situação concreta; e (3) a EVIDÊNCIA DE DESEMPENHO que comprova o critério, ou seja, o que o professor observa/corrige para julgar se foi atingido, com indicadores de qualidade (ex.: completo e fundamentado, com dados corretos, com justificativa adequada, com proposta viável...).'
+      +'\n- CRITÉRIO SUCINTO É PROIBIDO: nunca reduza a uma frase curta de 15–25 palavras. O texto deve ser autoexplicativo e detalhado, pronto para virar rubrica no plano final, sem depender do contexto de apoio.'
       +'\n- NUNCA use: "demonstrar progressão", "mostrar envolvimento", "participação ativa"'
-      +'\n\nFORMATO OBRIGATÓRIO — um bloco por habilidade, sem variações:'
+      +'\n\nFORMATO OBRIGATÓRIO — um bloco por habilidade, sem variações; cada CRIT deve ser UMA ÚNICA linha longa, sem quebras internas:'
       +formato
       +'\n\nResponda SEMPRE em português do Brasil.';
 
