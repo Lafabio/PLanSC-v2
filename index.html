@@ -916,7 +916,7 @@ mark.hl{background:#fff3a6;color:#4d3d00;font-weight:700;border-radius:3px;paddi
   </div>
   <div class="ai-box">
     <h4>⚡ Sugerir critérios de avaliação para a habilidade ativa</h4>
-    <p style="font-size:.8rem;color:#555;">A IA gera 4 critérios observáveis derivados do verbo da habilidade, alinhados ao conteúdo e metodologia definidos.</p>
+    <p style="font-size:.8rem;color:#555;">A IA gera 4 critérios observáveis derivados do verbo da habilidade, alinhados ao conteúdo e metodologia, e a rubrica de Conceitos (A/B/C) que diferencia os desempenhos de cada nível.</p>
     <div class="btn-row" style="margin-top:8px;justify-content:flex-start;">
       <button class="btn btn-pri" onclick="sugerirCrit()" id="btnCrit">🤖 Sugerir critérios</button>
     </div>
@@ -2137,6 +2137,17 @@ function parseCritBlock(str){
   crits=lines.filter(function(l){return /^CRIT\s*:/i.test(l.trim());})
     .map(function(l){return l.replace(/^CRIT\s*:\s*/i,'').replace(/^\[|\]$/g,'').replace(/^[\d\.\-\•\*\s]+/,'').trim();})
     .filter(function(l){return l.length>8;});
+  // Rubrica (Conceitos A/B/C) — extrai e etiqueta, baseada nos critérios
+  var concLabels={CONC_A:'Conceito A —',CONC_B1:'Conceito B1 —',CONC_B2:'Conceito B2 —',CONC_C:'Conceito C —'};
+  lines.forEach(function(l){
+    var m=/^\s*(CONC_[ABC]\d?)\s*:\s*(.+)$/i.exec(l.trim()) || /^\s*CONCEITO\s+([ABC]\d?)\s*[-:]\s*(.+)$/i.exec(l.trim());
+    if(m){
+      var chave=m[1].toUpperCase();
+      var label=concLabels['CONC_'+chave]||concLabels[chave]||chave+' —';
+      var txt=m[2].replace(/^\[|\]$/g,'').trim();
+      if(txt.length>8) crits.push(label+' '+txt);
+    }
+  });
   if(crits.length<2){
     crits=lines.filter(function(l){return /^\s*[1-4][\.):]\s+\S/.test(l);})
       .map(function(l){return l.replace(/^\s*[1-4][\.):]\s+/,'').trim();})
@@ -2145,7 +2156,7 @@ function parseCritBlock(str){
   }
   if(crits.length<2){
     crits=lines.map(function(l){return l.trim();})
-      .filter(function(l){return l.length>25&&!/^(INSTR|instrumento|HAB\s*\d|parte|PARTE|---|-|\*\*|#)/i.test(l);})
+      .filter(function(l){return l.length>25&&!/^(INSTR|instrumento|HAB\s*\d|parte|PARTE|---|-|\*\*|#|CONC)/i.test(l);})
       .slice(0,4);
   }
   return crits;
@@ -2251,6 +2262,10 @@ async function sugerirCrit(){
     ST.habilidades.forEach(function(h,i){
       formato += '\nHAB '+(i+1)+':';
       for(var k=1;k<=4;k++) formato += '\nCRIT: [descrição completa e detalhada do critério '+k+' da habilidade '+(i+1)+']';
+      formato += '\nCONC_A: [Conceito A da habilidade '+(i+1)+' — desempenho MÁXIMO, atinge plenamente os critérios sem lacunas]';
+      formato += '\nCONC_B1: [Conceito B da habilidade '+(i+1)+' — desempenho SIMPLES/INCOMPLETO, com lacunas evidentes]';
+      formato += '\nCONC_B2: [Conceito B da habilidade '+(i+1)+' — desempenho MAIS COMPLETO, porém INFERIOR ao A, com falhas pontuais]';
+      formato += '\nCONC_C: [Conceito C da habilidade '+(i+1)+' — desempenho MUITO INCOMPLETO, demonstra menos de 50% do desenvolvimento da habilidade]';
     });
     formato += '\n\nINSTR: [instrumento] — [como avalia estes critérios]';
     formato += '\nINSTR: [instrumento] — [justificativa]';
@@ -2267,8 +2282,14 @@ async function sugerirCrit(){
       +'\n- Relacionados ao conteúdo E ao que o aluno faz na metodologia descrita'
       +'\n- CADA critério deve ser descrito COMPLETAMENTE, em um parágrafo único e denso, com esta estrutura: (1) a AÇÃO observável que o aluno realiza, derivada do verbo da habilidade; (2) COM QUÊ ele realiza — conteúdo, material, produto ou situação concreta; e (3) a EVIDÊNCIA DE DESEMPENHO que comprova o critério, ou seja, o que o professor observa/corrige para julgar se foi atingido, com indicadores de qualidade (ex.: completo e fundamentado, com dados corretos, com justificativa adequada, com proposta viável...).'
       +'\n- CRITÉRIO SUCINTO É PROIBIDO: nunca reduza a uma frase curta de 15–25 palavras. O texto deve ser autoexplicativo e detalhado, pronto para virar rubrica no plano final, sem depender do contexto de apoio.'
+      +'\n\nREGRAS PARA O BLOCO DE CONCEITOS (RUBRICA — CONC_A, CONC_B1, CONC_B2, CONC_C): os critérios são a BASE da rubrica; cada conceito descreve com detalhes e exemplos concretos O QUE o aluno demonstra, mostrando evolução real entre os níveis (nunca frases genéricas como "atendeu ao critério 1"):'
+      +'\n- CONC_A: desempenho MÁXIMO — o aluno atinge plenamente os critérios, sem lacunas'
+      +'\n- CONC_B1: desempenho SIMPLES/INCOMPLETO — versão parcial dos critérios, com lacunas evidentes'
+      +'\n- CONC_B2: desempenho mais COMPLETO, porém INFERIOR ao A — quase pleno, com falhas pontuais'
+      +'\n- CONC_C: desempenho MUITO INCOMPLETO — demonstra menos de 50% do desenvolvimento da habilidade'
+      +'\n- Os conceitos devem usar o MESMO conteúdo/situação dos critérios e diferenciar claramente o que o aluno produz em cada nível.'
       +'\n- NUNCA use: "demonstrar progressão", "mostrar envolvimento", "participação ativa"'
-      +'\n\nFORMATO OBRIGATÓRIO — um bloco por habilidade, sem variações; cada CRIT deve ser UMA ÚNICA linha longa, sem quebras internas:'
+      +'\n\nFORMATO OBRIGATÓRIO — um bloco por habilidade, sem variações; cada CRIT, CONC_A, CONC_B1, CONC_B2 e CONC_C deve ser UMA ÚNICA linha longa, sem quebras internas:'
       +formato
       +'\n\nResponda SEMPRE em português do Brasil.';
 
