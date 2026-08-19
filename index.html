@@ -2059,7 +2059,7 @@ var SYS='Você é um especialista em BNCC e CBTC (Currículo Base do Território
 // ===== GROQ API =====
 var GROQ_API_KEY = ''; // Cole sua chave aqui ou use campo abaixo
 // Modelos em ordem de preferência — tenta o próximo se der 429
-var GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it', 'mixtral-8x7b-32768'];
+var GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
 var GROQ_MODEL_IDX = 0; // índice atual
 
 async function callGemini(prompt, modelIdx){
