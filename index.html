@@ -982,10 +982,10 @@ mark.hl{background:#fff3a6;color:#4d3d00;font-weight:700;border-radius:3px;paddi
     </div>
   </div>
   <div class="card">
-    <div class="card-title"><span class="badge">♿</span> Pontos Fundamentais — Apoio ao Professor Auxiliar (PEI)</div>
-    <div class="alert-info">💡 A IA analisa o <strong>plano completo</strong> e <strong>destaca os pontos mais fundamentais</strong> (objetivo essencial, conteúdo-chave, metodologia indispensável e avaliação essencial), para orientar o professor auxiliar a planejar a adaptação para o aluno com <strong>necessidades especiais segundo o PEI</strong>.</div>
+    <div class="card-title"><span class="badge">♿</span> Pontos Essenciais do Plano (PEI)</div>
+    <div class="alert-info">💡 A IA identifica o <strong>objetivo principal do conteúdo</strong> e <strong>sublinha os pontos essenciais</strong> (conteúdo-chave, etapas indispensáveis da metodologia e critérios de avaliação) no plano exportado em Word — <strong>nada é adicionado</strong> ao documento, apenas o destaque sublinhado para orientar o professor auxiliar na adaptação para o aluno com <strong>necessidades especiais segundo o PEI</strong>.</div>
     <div class="btn-row" style="margin-top:8px;justify-content:flex-start;">
-      <button class="btn btn-pri" onclick="destacarPontosPEI()" id="btnPEI">🤖 Destacar pontos fundamentais (PEI)</button>
+      <button class="btn btn-pri" onclick="destacarPontosPEI()" id="btnPEI">🤖 Sublinhar pontos essenciais (PEI)</button>
     </div>
     <div class="ai-result" id="iaPEI"></div>
   </div>
@@ -2520,6 +2520,7 @@ async function exportDocx(){
     var Table=d.Table,TableRow=d.TableRow,TableCell=d.TableCell,ImageRun=d.ImageRun;
     var AlignmentType=d.AlignmentType,WidthType=d.WidthType,BorderStyle=d.BorderStyle;
     var ShadingType=d.ShadingType,VerticalAlign=d.VerticalAlign,HeightRule=d.HeightRule;
+    var UnderlineType=d.UnderlineType;
     var Footer=d.Footer;
 
     // ── helpers ──
@@ -2527,6 +2528,7 @@ async function exportDocx(){
     var ab={top:brd,bottom:brd,left:brd,right:brd};
     var B=function(t){return new TextRun({text:String(t||''),bold:true,font:'Arial',size:20,boldComplexScript:true});};
     var N=function(t){return new TextRun({text:String(t||''),font:'Arial',size:20});};
+    var U=function(t){return new TextRun({text:String(t||''),font:'Arial',size:20,underline:{type:UnderlineType.SINGLE}});};
 
     // Célula rótulo (col esquerda) — fundo EEE8D8, bold, centralizado vertical, texto alinhado à esquerda
     var LC=function(label){
@@ -2540,14 +2542,24 @@ async function exportDocx(){
       });
     };
 
-    // Célula valor (col direita) — quebra linha em \n, texto JUSTIFICADO
+    // Célula valor (col direita) — quebra linha em \n, texto JUSTIFICADO.
+    // Trechos entre **...** (destaque PEI) são renderizados SUBLINHADOS.
     var VC=function(text){
       var lines=(String(text||'')).split('\n');
       var paras=lines.map(function(l){
+        var runs=[];
+        var re=/\*\*(.+?)\*\*/g,m,last=0;
+        while((m=re.exec(l))){
+          if(m.index>last) runs.push(N(l.substring(last,m.index)));
+          runs.push(U(m[1]));
+          last=m.index+m[0].length;
+        }
+        if(last<l.length) runs.push(N(l.substring(last)));
+        if(!runs.length) runs.push(N(l));
         return new Paragraph({
           alignment:AlignmentType.JUSTIFIED,
           spacing:{before:0,after:40},
-          children:[N(l)]
+          children:runs
         });
       });
       if(!paras.length) paras=[new Paragraph({children:[N('')]})];
@@ -2574,25 +2586,25 @@ async function exportDocx(){
     var turma   = document.getElementById('turma').value||'';
     // Todas as habilidades numeradas
     var habLines = ST.habilidades.map(habLinhaPlano).filter(Boolean);
-    var hab = habLines.join('\n\n');
-    var cont    = ST.habilidades.map(function(h,i){
+    var hab = (window.PEI_MARKS&&window.PEI_MARKS.hab) || habLines.join('\n\n');
+    var cont = (window.PEI_MARKS&&window.PEI_MARKS.cont) || (ST.habilidades.map(function(h,i){
       var c = h.conteudo||'';
       return c ? (ST.habilidades.length>1?'Habilidade '+(i+1)+':\n'+c:c) : '';
-    }).filter(Boolean).join('\n\n')||'';
+    }).filter(Boolean).join('\n\n')||'');
     var crit    = [];
     ST.habilidades.forEach(function(h,i){
       (h.criterios||[]).forEach(function(c,j){
         crit.push((ST.habilidades.length>1?'Hab.'+(i+1)+'.'+(j+1)+': ':((j+1)+'. '))+c);
       });
     });
-    var critText = crit.join('\n');
+    var critText = (window.PEI_MARKS&&window.PEI_MARKS.crit) || crit.join('\n');
     var bloomAll = ST.habilidades.map(function(h,i){
       var lv=h.bloomLevel||0;
       return lv?'Habilidade '+(i+1)+': Nível '+lv+' — '+bloomNames[lv]:'';
     }).filter(Boolean).join(' | ') || (ST.bloomLevel?'Nível '+ST.bloomLevel+' — '+bloomNames[ST.bloomLevel]:'—');
     var instr   = getInstrs();
     // Metodologia INTEGRADA (uma única para todo o plano, desenvolve todas as habilidades juntas)
-    var met     = getMetodologiaIntegrada() || '—';
+    var met     = (window.PEI_MARKS&&window.PEI_MARKS.met) || getMetodologiaIntegrada() || '—';
     var carga   = cargaHorariaMensalLabel(document.getElementById('cargaHoraria').value) || '—';
     var refs    = document.getElementById('referencias').value||'';
 
@@ -4102,7 +4114,7 @@ async function destacarPontosPEI(){
   var r=document.getElementById('iaPEI');
   b.disabled=true;
   r.className='ai-result loading';
-  r.innerHTML='<span class="spinner"></span>Analisando o plano e destacando os pontos fundamentais...';
+  r.innerHTML='<span class="spinner"></span>Identificando o objetivo principal do conteúdo e os pontos essenciais do plano...';
   try{
     var area=ST.areas.join(', ');
     var comp=document.getElementById('componente').value.trim();
@@ -4123,7 +4135,8 @@ async function destacarPontosPEI(){
     });
     var instr=getInstrs();
     var p='Você é um especialista em educação inclusiva e PEI (Plano de Ensino Individualizado).'
-      +'\nAnalise o PLANO DE AULA completo abaixo e DESTAQUE os pontos mais fundamentais do plano — aqueles que o professor auxiliar PRECISA conhecer para planejar a adaptação para o aluno com necessidades especiais segundo o PEI.'
+      +'\nAnalise o PLANO DE AULA abaixo e identifique o OBJETIVO PRINCIPAL DO CONTEÚDO (a essência do que o aluno precisa aprender, derivada do verbo da habilidade).'
+      +'\nDepois, para cada seção, reescreva o texto EXATAMENTE como está, envolvendo com **asteriscos duplos** apenas as palavras ou trechos ESSENCIAIS — aqueles que não podem faltar para o professor auxiliar trabalhar o objetivo principal com o aluno (o conteúdo-chave, as etapas indispensáveis da metodologia e os critérios que comprovam a aprendizagem).'
       +'\n\nPLANO DE AULA:'
       +'\nÁrea/Componente: '+(area||comp||'—')
       +'\nTema Gerador: '+(tema||'—')
@@ -4135,20 +4148,31 @@ async function destacarPontosPEI(){
       +'\n\nCRITÉRIOS DE AVALIAÇÃO:\n'+(crit.join('\n')||'—')
       +'\n\nINSTRUMENTOS DE AVALIAÇÃO:\n'+(instr||'—')
       +'\n\n---'
-      +'\nTAREFA: identifique e apresente, por seção, os pontos FUNDAMENTAIS do plano:'
-      +'\n1) OBJETIVO ESSENCIAL — o que o aluno precisa aprender (essência da habilidade, sem trocar o verbo).'
-      +'\n2) CONTEÚDO-CHAVE — o objeto de conhecimento indispensável.'
-      +'\n3) METODOLOGIA INDISPENSÁVEL — os momentos/atividades que não podem faltar para desenvolver a habilidade.'
-      +'\n4) AVALIAÇÃO ESSENCIAL — os critérios e instrumentos que verificam a aprendizagem.'
-      +'\n5) PONTOS DE ATENÇÃO NA ADAPTAÇÃO (PEI) — o que merece cuidado especial ao adaptar para o aluno com necessidades especiais.'
+      +'\nFORMATO OBRIGATÓRIO — responda APENAS com as seções abaixo, cada uma iniciada pelo marcador exato, na mesma ordem. Dentro de cada seção, mantenha o texto original e envolva apenas os trechos essenciais com **asteriscos duplos** (o mínimo necessário, sem sublinhar o texto inteiro):'
+      +'\n##HAB##'
+      +'\n[habilidades com trechos essenciais entre **...**]'
+      +'\n##CONTEUDO##'
+      +'\n[conteúdos com trechos essenciais entre **...**]'
+      +'\n##METODOLOGIA##'
+      +'\n[metodologia com trechos essenciais entre **...**]'
+      +'\n##CRITERIOS##'
+      +'\n[critérios com trechos essenciais entre **...**]'
       +'\n\nREGRAS:'
-      +'\n- Destaque com **asteriscos duplos** as palavras ou trechos mais importantes de cada ponto fundamental.'
-      +'\n- Mantenha o verbo e a estrutura da habilidade. Seja direto, prático e objetivo.'
-      +'\n- Use cabeçalhos curtos (ex: "1) OBJETIVO ESSENCIAL:") e frases curtas.'
-      +'\n- Responda em português do Brasil, sem markdown extra.';
+      +'\n- Não invente conteúdo: COPIE o texto das seções do plano, apenas adicionando os **destaques**.'
+      +'\n- Se um trecho essencial aparecer em mais de uma seção, destaque em todas.'
+      +'\n- Não repita seções nem adicione comentários, introduções ou conclusões.'
+      +'\n- É OBRIGATÓRIO responder 100% em português do Brasil — nenhuma palavra, título ou frase em inglês.';
     var t=await callGemini(p);
+    window.PEI_MARKS={};
+    var secs=String(t||'').split(/\n?##([A-Z]+)##\n?/g);
+    var order={HAB:'hab',CONTEUDO:'cont',METODOLOGIA:'met',CRITERIOS:'crit'};
+    for(var k=1;k<secs.length;k+=2){
+      var key=order[(secs[k]||'').toUpperCase()];
+      if(key) window.PEI_MARKS[key]=(secs[k+1]||'').trim();
+    }
     r.className='ai-result';
-    r.innerHTML=renderAIHtml(t);
+    r.innerHTML=renderAIHtml(t)
+      +'<br><br><strong style="color:#27ae60;font-family:Sora,sans-serif;">✅ Pontos essenciais identificados. Ao exportar o Word, os trechos destacados serão <u>sublinhados</u> no plano (nada é adicionado ao documento).</strong>';
   }catch(e){
     r.className='ai-result loading';
     r.innerHTML='⚠️ '+escHtml(e.message);
