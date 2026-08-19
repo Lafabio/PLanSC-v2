@@ -2054,13 +2054,21 @@ function buildChecklist(){
 }
 
 // ===== AI =====
-var SYS='Você é um especialista em BNCC e CBTC (Currículo Base do Território Catarinense) para TODAS as etapas da Educação Básica: Educação Infantil (EI), Ensino Fundamental Anos Iniciais (1º ao 5º ano), Ensino Fundamental Anos Finais (6º ao 9º ano) e Ensino Médio (1ª a 3ª série), incluindo EJA. Domina a Taxonomia de Bloom e adapta suas sugestões à faixa etária e etapa correspondente da habilidade selecionada. Regras invioláveis: 1) NUNCA troque o verbo da habilidade — ele define o nível cognitivo. 2) Os conteúdos devem contemplar explicitamente o VERBO da habilidade — pergunte-se: este conteúdo permite ao aluno exercer este verbo? 3) Ao sugerir conteúdos, sempre indique conexões interdisciplinares possíveis com outras áreas do EM quando pertinente. 4) O caminho metodológico deve integrar: o verbo + os conteúdos escolhidos + as estratégias/metodologias ativas selecionadas + o contexto EJA/EM, com 3 momentos: inicial (mobilização), desenvolvimento (prática no nível cognitivo do verbo) e sistematização. 5) Critérios de avaliação devem contemplar a aquisição/desenvolvimento da habilidade, derivados do verbo, observáveis e mensuráveis. 6) Instrumentos sugeridos devem ser coerentes com os critérios e com as estratégias escolhidas. 7) Critérios vagos NÃO são aceitos. Responda sempre em português do Brasil. Seja direto e prático.';
+var SYS='Você é um especialista em BNCC e CBTC (Currículo Base do Território Catarinense) para TODAS as etapas da Educação Básica: Educação Infantil (EI), Ensino Fundamental Anos Iniciais (1º ao 5º ano), Ensino Fundamental Anos Finais (6º ao 9º ano) e Ensino Médio (1ª a 3ª série), incluindo EJA. Domina a Taxonomia de Bloom e adapta suas sugestões à faixa etária e etapa correspondente da habilidade selecionada. Regras invioláveis: 1) NUNCA troque o verbo da habilidade — ele define o nível cognitivo. 2) Os conteúdos devem contemplar explicitamente o VERBO da habilidade — pergunte-se: este conteúdo permite ao aluno exercer este verbo? 3) Ao sugerir conteúdos, sempre indique conexões interdisciplinares possíveis com outras áreas do EM quando pertinente. 4) O caminho metodológico deve integrar: o verbo + os conteúdos escolhidos + as estratégias/metodologias ativas selecionadas + o contexto EJA/EM, com 3 momentos: inicial (mobilização), desenvolvimento (prática no nível cognitivo do verbo) e sistematização. 5) Critérios de avaliação devem contemplar a aquisição/desenvolvimento da habilidade, derivados do verbo, observáveis e mensuráveis. 6) Instrumentos sugeridos devem ser coerentes com os critérios e com as estratégias escolhidas. 7) Critérios vagos NÃO são aceitos. Responda SEMPRE em português do Brasil. Seja direto e prático. PROIBIDO incluir na resposta o seu raciocínio, linha de pensamento, planejamento, análise passo a passo ou "thinking process" — entregue APENAS o resultado final solicitado, começando diretamente pela saída no formato exigido.';
 
 // ===== GROQ API =====
 var GROQ_API_KEY = ''; // Cole sua chave aqui ou use campo abaixo
 // Modelos em ordem de preferência — tenta o próximo se der 429
 var GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
 var GROQ_MODEL_IDX = 0; // índice atual
+
+// Remove linha de pensamento em inglês que o modelo de raciocínio às vezes imprime antes da resposta
+function stripCot(t){
+  t=String(t||'');
+  if(!/^Here'?s a thinking process/i.test(t)) return t;
+  var cut=t.search(/\n(?=(?:CRIT_|CONC_|##|INSTR|OBJETIVO|CONTEÚDO|METODOLOGIA|CRITÉRIOS|HABILIDADES|HAB_|BLOOM|NÍVEL|NIVEL))/m);
+  return cut>=0 ? t.slice(cut+1) : t;
+}
 
 async function callGemini(prompt, modelIdx){
   if(modelIdx === undefined) modelIdx = GROQ_MODEL_IDX;
@@ -2074,7 +2082,7 @@ async function callGemini(prompt, modelIdx){
       {role:'system',content: SYS},
       {role:'user',content: prompt}
     ],
-    max_tokens: 3000,
+    max_tokens: 6000,
     temperature: 0.7
   };
   var r;
@@ -2096,7 +2104,7 @@ async function callGemini(prompt, modelIdx){
   }
   var d = await r.json();
   if(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)
-    return d.choices[0].message.content;
+    return stripCot(d.choices[0].message.content);
   if(d.error) throw new Error('Groq ('+model+'): '+(d.error.message||JSON.stringify(d.error)));
   throw new Error('Resposta inesperada da API Groq');
 }
@@ -2701,30 +2709,56 @@ async function exportDocx(){
         children:[new TextRun({text:'Sistema produzido por Prof. Lafaiete Erkmann — Todos os direitos reservados. Proibida reprodução sem autorização.',font:'Arial',size:14,color:'888888',italics:true})]
       })]
     });
+    var secPrincipal={
+      properties:{
+        page:{
+          size:{width:11906,height:16838},
+          // Margens do modelo: top:426 right:707 bottom:709 left:851
+          margin:{top:426,right:707,bottom:709,left:851}
+        }
+      },
+      children:[
+        headerTable,
+        new Paragraph({spacing:{before:80,after:40}}),
+        new Paragraph({
+          alignment:AlignmentType.CENTER,
+          spacing:{before:0,after:0},
+          children:[B('PLANO DE AULA')]
+        }),
+        new Paragraph({spacing:{before:40,after:0}}),
+        mainTable
+      ]
+    };
+    var secs=[secPrincipal];
+
+    // Apêndice PEI — orientações ao professor auxiliar (neurodivergência)
+    var ap=(window.PEI_MARKS&&window.PEI_MARKS.apendice)||'';
+    if(ap){
+      var apChildren=[
+        new Paragraph({spacing:{before:0,after:200},alignment:AlignmentType.CENTER,children:[new TextRun({text:'APÊNDICE — ORIENTAÇÕES AO PROFESSOR AUXILIAR',bold:true,font:'Arial',size:28,boldComplexScript:true})]}),
+        new Paragraph({spacing:{before:0,after:160},alignment:AlignmentType.JUSTIFIED,children:[new TextRun({text:'Pontos essenciais do plano para apoiar o professor auxiliar na adaptação das atividades para o aluno com neurodivergência, conforme o PEI.',font:'Arial',size:20,italics:true})]})
+      ];
+      ap.split('\n').forEach(function(l){
+        l=String(l||'').trim();
+        if(!l) return;
+        var runs=[],re=/\*\*(.+?)\*\*/g,m,last=0;
+        while((m=re.exec(l))){
+          if(m.index>last) runs.push(N(l.substring(last,m.index)));
+          runs.push(new TextRun({text:m[1],font:'Arial',size:20,bold:true}));
+          last=m.index+m[0].length;
+        }
+        if(last<l.length) runs.push(N(l.substring(last)));
+        if(!runs.length) runs.push(N(l));
+        apChildren.push(new Paragraph({alignment:AlignmentType.JUSTIFIED,spacing:{before:0,after:80},children:runs}));
+      });
+      secs.push({properties:{page:{size:{width:11906,height:16838},margin:{top:426,right:707,bottom:709,left:851}}},children:apChildren});
+    }
+
     var doc=new Document({
       footers:{
         default: planFooter
       },
-      sections:[{
-        properties:{
-          page:{
-            size:{width:11906,height:16838},
-            // Margens do modelo: top:426 right:707 bottom:709 left:851
-            margin:{top:426,right:707,bottom:709,left:851}
-          }
-        },
-        children:[
-          headerTable,
-          new Paragraph({spacing:{before:80,after:40}}),
-          new Paragraph({
-            alignment:AlignmentType.CENTER,
-            spacing:{before:0,after:0},
-            children:[B('PLANO DE AULA')]
-          }),
-          new Paragraph({spacing:{before:40,after:0}}),
-          mainTable
-        ]
-      }]
+      sections: secs
     });
 
     var blob=await Packer.toBlob(doc);
@@ -4157,22 +4191,30 @@ async function destacarPontosPEI(){
       +'\n[metodologia com trechos essenciais entre **...**]'
       +'\n##CRITERIOS##'
       +'\n[critérios com trechos essenciais entre **...**]'
+      +'\n##APENDICE##'
+      +'\n[Orientação ao professor auxiliar para o aluno com neurodivergência. Estrutura fixa, com **...** nos termos-chave:'
+      +'\n"OBJETIVO PRINCIPAL DO CONTEÚDO:" (1 frase — a essência do que o aluno precisa aprender, sem trocar o verbo da habilidade).'
+      +'\n"CONTEÚDO-CHAVE:" (1 frase — o objeto de conhecimento indispensável e o suporte visual/digital a usar).'
+      +'\n"METODOLOGIA INDISPENSÁVEL:" (2 a 3 frases — as etapas e recursos que não podem faltar, com adaptações sensoriais e de comunicação para neurodivergência).'
+      +'\n"AVALIAÇÃO ESSENCIAL:" (1 frase — o que comprova que o aluno aprendeu).'
+      +'\n"PONTOS DE ATENÇÃO NA ADAPTAÇÃO (NEURODIVERGÊNCIA):" (2 a 3 frases — cuidados com sobrecarga sensorial, tempo, linguagem e apoios visuais).]'
       +'\n\nREGRAS:'
       +'\n- Não invente conteúdo: COPIE o texto das seções do plano, apenas adicionando os **destaques**.'
       +'\n- Se um trecho essencial aparecer em mais de uma seção, destaque em todas.'
       +'\n- Não repita seções nem adicione comentários, introduções ou conclusões.'
-      +'\n- É OBRIGATÓRIO responder 100% em português do Brasil — nenhuma palavra, título ou frase em inglês.';
+      +'\n- É OBRIGATÓRIO responder 100% em português do Brasil — nenhuma palavra, título ou frase em inglês.'
+      +'\n- PROIBIDO incluir raciocínio, planejamento ou análise passo a passo: comece direto no "##HAB##".';
     var t=await callGemini(p);
     window.PEI_MARKS={};
     var secs=String(t||'').split(/\n?##([A-Z]+)##\n?/g);
-    var order={HAB:'hab',CONTEUDO:'cont',METODOLOGIA:'met',CRITERIOS:'crit'};
+    var order={HAB:'hab',CONTEUDO:'cont',METODOLOGIA:'met',CRITERIOS:'crit',APENDICE:'apendice'};
     for(var k=1;k<secs.length;k+=2){
       var key=order[(secs[k]||'').toUpperCase()];
       if(key) window.PEI_MARKS[key]=(secs[k+1]||'').trim();
     }
     r.className='ai-result';
     r.innerHTML=renderAIHtml(t)
-      +'<br><br><strong style="color:#27ae60;font-family:Sora,sans-serif;">✅ Pontos essenciais identificados. Ao exportar o Word, os trechos destacados serão <u>sublinhados</u> no plano (nada é adicionado ao documento).</strong>';
+      +'<br><br><strong style="color:#27ae60;font-family:Sora,sans-serif;">✅ Pontos essenciais identificados. Ao exportar o Word: os trechos destacados serão <u>sublinhados</u> no plano e um <u>Apêndice com orientações ao professor auxiliar</u> (neurodivergência/PEI) será anexado no final do documento.</strong>';
   }catch(e){
     r.className='ai-result loading';
     r.innerHTML='⚠️ '+escHtml(e.message);
