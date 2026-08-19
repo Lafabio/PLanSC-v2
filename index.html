@@ -2070,19 +2070,31 @@ function stripCot(t){
   return cut>=0 ? t.slice(cut+1) : t;
 }
 
+// Limita o tamanho de textos enviados à IA para caber no limite de tokens (TPM) do plano gratuito
+function trunc(s,max){
+  s=String(s||'');
+  if(s.length<=max) return s;
+  var cut=s.slice(0,max);
+  cut=cut.replace(/\s+\S*$/,'');
+  return cut+' …';
+}
+
 async function callGemini(prompt, modelIdx){
   if(modelIdx === undefined) modelIdx = GROQ_MODEL_IDX;
   var key = window.GROQ_KEY || GROQ_API_KEY;
   if(!key) throw new Error('Chave da API Groq não configurada. Clique em ⚙️ Configurar IA para inserir sua chave.');
   var model = GROQ_MODELS[modelIdx] || GROQ_MODELS[0];
   var url = 'https://api.groq.com/openai/v1/chat/completions';
+  // TPM gratuito = 8000 tokens total (entrada + saída). Ajusta o max_tokens para nunca estourar.
+  var estIn = Math.ceil(String(prompt||'').length/3) + 400; // +400 estimado p/ SYS
+  var maxTok = Math.max(800, Math.min(3000, 7500 - estIn));
   var body = {
     model: model,
     messages:[
       {role:'system',content: SYS},
       {role:'user',content: prompt}
     ],
-    max_tokens: 6000,
+    max_tokens: maxTok,
     temperature: 0.7
   };
   var r;
@@ -2261,8 +2273,8 @@ async function sugerirCrit(){
 
     var habsTudo = ST.habilidades.map(function(h,i){
       var bloco = 'HABILIDADE '+(i+1)+'\n'+habInfoSingle(h)
-        +'\nObjeto de conhecimento/conteúdo: '+(h.conteudo||'não especificado');
-      if(h.metodologia) bloco += '\nCaminho metodológico: '+h.metodologia;
+        +'\nObjeto de conhecimento/conteúdo: '+trunc(h.conteudo||'não especificado',1600);
+      if(h.metodologia) bloco += '\nCaminho metodológico: '+trunc(h.metodologia,1800);
       return bloco;
     }).join('\n\n---\n\n');
 
@@ -4157,17 +4169,17 @@ async function destacarPontosPEI(){
     var ctx=document.getElementById('contexto').value.trim();
     var cont=ST.habilidades.map(function(h,i){
       var c=h.conteudo||'';
-      return c ? 'Habilidade '+(i+1)+':\n'+c : '';
+      return c ? 'Habilidade '+(i+1)+':\n'+trunc(c,1500) : '';
     }).filter(Boolean).join('\n\n');
     var met=ST.habilidades.map(function(h,i){
       var m=h.metodologia||'';
-      return m ? 'Habilidade '+(i+1)+':\n'+m : '';
+      return m ? 'Habilidade '+(i+1)+':\n'+trunc(m,1500) : '';
     }).filter(Boolean).join('\n\n');
     var crit=[];
     ST.habilidades.forEach(function(h,i){
-      (h.criterios||[]).forEach(function(c,j){crit.push('Hab.'+(i+1)+'.'+(j+1)+': '+c);});
+      (h.criterios||[]).forEach(function(c,j){crit.push('Hab.'+(i+1)+'.'+(j+1)+': '+trunc(c,700));});
     });
-    var instr=getInstrs();
+    var instr=trunc(getInstrs(),900);
     var p='Você é um especialista em educação inclusiva e PEI (Plano de Ensino Individualizado).'
       +'\nAnalise o PLANO DE AULA abaixo e identifique o OBJETIVO PRINCIPAL DO CONTEÚDO (a essência do que o aluno precisa aprender, derivada do verbo da habilidade).'
       +'\nDepois, para cada seção, reescreva o texto EXATAMENTE como está, envolvendo com **asteriscos duplos** apenas as palavras ou trechos ESSENCIAIS — aqueles que não podem faltar para o professor auxiliar trabalhar o objetivo principal com o aluno (o conteúdo-chave, as etapas indispensáveis da metodologia e os critérios que comprovam a aprendizagem).'
@@ -4176,7 +4188,7 @@ async function destacarPontosPEI(){
       +'\nTema Gerador: '+(tema||'—')
       +'\nTurma/Etapa: '+(turma||'—')
       +'\nContexto da turma: '+(ctx||'—')
-      +'\n\nHABILIDADES:\n'+(hab||'—')
+      +'\n\nHABILIDADES:\n'+(trunc(hab,2500)||'—')
       +'\n\nOBJETO DE CONHECIMENTO / CONTEÚDO:\n'+(cont||'—')
       +'\n\nCAMINHO METODOLÓGICO:\n'+(met||'—')
       +'\n\nCRITÉRIOS DE AVALIAÇÃO:\n'+(crit.join('\n')||'—')
